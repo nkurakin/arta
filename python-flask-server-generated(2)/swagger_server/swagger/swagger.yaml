@@ -1,0 +1,121 @@
+openapi: 3.0.1
+info:
+  title: Арта
+  description: ""
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.0.0
+servers:
+- url: /
+paths:
+  /arta/scale/{scaleid}:
+    post:
+      tags:
+      - arta
+      summary: Update an existing map scale
+      operationId: map_new_scale
+      parameters:
+      - name: scaleid
+        in: path
+        description: ID of pet to return
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid nubmer
+          content: {}
+      x-codegen-request-body-name: body
+      x-openapi-router-controller: swagger_server.controllers.arta_controller
+  /arta/mode/{modeid}:
+    post:
+      tags:
+      - arta
+      summary: Update an existing mode
+      operationId: map_new_mode
+      parameters:
+      - name: modeid
+        in: path
+        description: ID of pet to return
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid nubmer
+          content: {}
+      x-codegen-request-body-name: body
+      x-openapi-router-controller: swagger_server.controllers.arta_controller
+  /arta/x/{x}:
+    post:
+      tags:
+      - arta
+      summary: X point
+      operationId: map_x
+      parameters:
+      - name: x
+        in: path
+        description: ID of pet to return
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid nubmer
+          content: {}
+      x-codegen-request-body-name: body
+      x-openapi-router-controller: swagger_server.controllers.arta_controller
+  /arta/y/{y}:
+    post:
+      tags:
+      - arta
+      summary: Y point
+      operationId: map_y
+      parameters:
+      - name: "y"
+        in: path
+        description: ID of pet to return
+        required: true
+        style: simple
+        explode: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid nubmer
+          content: {}
+      x-codegen-request-body-name: body
+      x-openapi-router-controller: swagger_server.controllers.arta_controller
+  /arta:
+    get:
+      tags:
+      - arta
+      summary: Update an existing mode
+      operationId: result
+      responses:
+        "400":
+          description: Error
+          content: {}
+      x-codegen-request-body-name: body
+      x-openapi-router-controller: swagger_server.controllers.arta_controller
+components: {}
+
