@@ -94,8 +94,10 @@ nano /etc/wb-rules/climate_ctrl.js
    ```
    climate_ui: правила загружены
    climate_ctrl: правила загружены
-   climate_ctrl: инициализация, безопасная позиция OFF. MIN_ON=180s MIN_OFF=180s STALE=60s
+   climate_ctrl: инициализация, безопасная позиция. MIN_ON=180s MIN_OFF=180s STALE=60s
    ```
+   (строка инициализации появляется через ~5 с после загрузки — отложенный
+   старт по `timer`, чтобы wb-mqtt-serial успел восстановить состояние реле)
 
 2. Убедитесь, что виртуальное устройство создалось:
 
@@ -172,9 +174,10 @@ nano /etc/wb-rules/climate_ctrl.js
   - `CompressorActual` — фактическое состояние реле K1;
   - четыре канала температур.
 - Настройки защиты компрессора меняются в начале `climate_ctrl.js`
-  (`MIN_ON_SEC`, `MIN_OFF_SEC`, `STALE_SEC`) либо переменными окружения
-  сервиса wb-rules (`CLIMATE_MIN_ON_SEC` и т.п., через drop-in
-  `systemctl edit wb-rules`).
+  (`MIN_ON_SEC`, `MIN_OFF_SEC`, `STALE_SEC`) — это обычные константы.
+  API wb-rules (движок Duktape) не предоставляет переменные окружения,
+  поэтому настройка через env-файлы systemd недоступна; правьте файл и
+  сохраняйте — правила перезагрузятся автоматически.
 
 ### Обновление скриптов
 

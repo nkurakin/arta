@@ -9,21 +9,24 @@
 //   Hysteresis        value   (RW)  °C                 — гистерезис уставки
 //   CompressorCommand switch  (RO)  0/1                — выход термостата
 // Индикация температур (read-only):
-//   TempBottom    — датчик низ   (wb-mai6_28/IN 1 N Temperature)
-//   TempTop       — датчик верх  (wb-mai6_28/IN 2 P Temperature)
-//   TempPortable  — переносной   (wb-mai6_28/IN 1 P Temperature)
-//   TempExternal  — внешний      (wb-mai6_28/Internal Temperature)
+//   TempBottom    — датчик низ     (wb-mai6_28/IN 1 N Temperature)
+//   TempTop       — датчик верх    (wb-mai6_28/IN 2 P Temperature)
+//   TempPortable  — переносной     (wb-mai6_28/IN 1 P Temperature)
+//   TempExternal  — внешний        (wb-mai6_28/Internal Temperature)
 // Фактическое состояние реле компрессора:
 //   CompressorActual — wb-mrwm2_134/K1
 //
 // Взаимодействие со скриптом термостата climate_ctrl.js — через MQTT-топики
 // внутреннего канала контроллера (localhost:1883):
 //   wb/climate/set/<Param>          ui -> ctrl (команды параметров, retained)
-//   wb/climate/fb/CompressorCommand ctrl -> ui  (выход термостата, retained)
+//   wb/climate/fb/CompressorCommand ctrl -> ui (выход термостата, retained)
 //
-// Размещение: /etc/wb-rules/climate_ui.js (wb-rules перезагрузит сам).
+// Размещение: /etc/wb-rules/climate_ui.js (wb-rules перезагрузит файл сам).
 // Зависимостей от npm-пакетов нет — только API wb-rules.
+// Стиль: ES5 (движок wb-rules — Duktape), без trailing-запятых.
 // ============================================================================
+
+"use strict";
 
 defineVirtualDevice("climate_ui", {
     title: "Climate Chamber UI",
@@ -33,13 +36,13 @@ defineVirtualDevice("climate_ui", {
             title: "Режим работы (0=OFF, 1=AUTO)",
             type: "switch",
             value: 0,
-            forceDefault: true, // при старте всегда OFF — безопасная позиция
+            forceDefault: true // при старте всегда OFF — безопасная позиция
         },
         Manual: {
             title: "Ручной режим (0=OFF, 1=ON)",
             type: "switch",
             value: 0,
-            forceDefault: true,
+            forceDefault: true
         },
         TargetTemp: {
             title: "Целевая температура, °C",
@@ -48,7 +51,7 @@ defineVirtualDevice("climate_ui", {
             min: -40,
             max: 150,
             readonly: false,
-            units: "unit:c",
+            units: "unit:c"
         },
         Hysteresis: {
             title: "Гистерезис, °C",
@@ -57,7 +60,7 @@ defineVirtualDevice("climate_ui", {
             min: 0.1,
             max: 10,
             readonly: false,
-            units: "unit:c",
+            units: "unit:c"
         },
 
         // ---- выход термостата (RO, обновляется из climate_ctrl.js) ------
@@ -65,7 +68,7 @@ defineVirtualDevice("climate_ui", {
             title: "Команда термостата на компрессор (RO)",
             type: "switch",
             value: 0,
-            readonly: true,
+            readonly: true
         },
 
         // ---- фактическое состояние реле WB-WRM2 (RO) --------------------
@@ -73,7 +76,7 @@ defineVirtualDevice("climate_ui", {
             title: "Фактическое состояние реле K1 (RO)",
             type: "switch",
             value: 0,
-            readonly: true,
+            readonly: true
         },
 
         // ---- индикация температур (RO) ----------------------------------
@@ -82,30 +85,30 @@ defineVirtualDevice("climate_ui", {
             type: "value",
             value: null,
             readonly: true,
-            units: "unit:c",
+            units: "unit:c"
         },
         TempTop: {
             title: "Температура в камере, верх (RO)",
             type: "value",
             value: null,
             readonly: true,
-            units: "unit:c",
+            units: "unit:c"
         },
         TempPortable: {
             title: "Переносной термометр в камере (RO)",
             type: "value",
             value: null,
             readonly: true,
-            units: "unit:c",
+            units: "unit:c"
         },
         TempExternal: {
             title: "Температура снаружи камеры (RO)",
             type: "value",
             value: null,
             readonly: true,
-            units: "unit:c",
-        },
-    },
+            units: "unit:c"
+        }
+    }
 });
 
 // ---------------------------------------------------------------------------
@@ -118,20 +121,29 @@ defineVirtualDevice("climate_ui", {
             if (newValue === null || newValue === undefined) return;
             publish("wb/climate/set/" + name, String(newValue),
                     { qos: 0, retain: true });
-        },
+        }
     });
 });
 
 // ---------------------------------------------------------------------------
-// Приём выхода термостата из climate_ctrl.js -> readonly-канал устройства
+// Приём выхода термостата из climate_ctrl.js -> readonly-канал устройства.
+// Топик содержит слэши, поэтому используется when() c обратным вызовом,
+// а не строковая форма whenChanged ("device/control" нотация тут неприменима).
 // ---------------------------------------------------------------------------
 defineRule("climate_ui_recv_command", {
-    when: /^wb\/climate\/fb\/CompressorCommand$/,
-    then: function (message) {
-        var v = message ? Number(message.message.toString()) : NaN;
+    when: function (match) {
+        return match("/wb/climate/fb/CompressorCommand");
+    },
+    then: function (topic, message) {
+        var v = NaN;
+        try {
+            v = Number(String(message));
+        } catch (e) {
+            return;
+        }
         if (isNaN(v)) return;
         dev["climate_ui/CompressorCommand"] = v ? 1 : 0;
-    },
+    }
 });
 
 // ---------------------------------------------------------------------------
@@ -142,7 +154,7 @@ defineRule("climate_ui_compressor_actual", {
     whenChanged: "wb-mrwm2_134/K1",
     then: function (newValue) {
         dev["climate_ui/CompressorActual"] = newValue ? 1 : 0;
-    },
+    }
 });
 
 // ---------------------------------------------------------------------------
@@ -153,10 +165,10 @@ defineRule("climate_ui_compressor_actual", {
 // ---------------------------------------------------------------------------
 var TEMP_CHANNELS = [
     // [device/channel в нотации wb-rules, имя канала climate_ui]
-    ["wb-mai6_28/IN 1 N Temperature", "TempBottom"],   // низ камеры
-    ["wb-mai6_28/IN 2 P Temperature", "TempTop"],      // верх камеры
-    ["wb-mai6_28/IN 1 P Temperature", "TempPortable"], // переносной термометр
-    ["wb-mai6_28/Internal Temperature", "TempExternal"], // снаружи камеры
+    ["wb-mai6_28/IN 1 N Temperature", "TempBottom"],    // низ камеры
+    ["wb-mai6_28/IN 2 P Temperature", "TempTop"],       // верх камеры
+    ["wb-mai6_28/IN 1 P Temperature", "TempPortable"],  // переносной термометр
+    ["wb-mai6_28/Internal Temperature", "TempExternal"] // снаружи камеры
 ];
 
 TEMP_CHANNELS.forEach(function (pair, i) {
@@ -166,7 +178,7 @@ TEMP_CHANNELS.forEach(function (pair, i) {
             var v = Number(newValue);
             if (newValue === null || newValue === undefined || isNaN(v)) return;
             dev["climate_ui/" + pair[1]] = Math.round(v * 100) / 100;
-        },
+        }
     });
 });
 
@@ -185,7 +197,7 @@ defineRule("climate_ui_initial_publish", {
                         { qos: 0, retain: true });
             }
         });
-    },
+    }
 });
 
 log.info("climate_ui: правила загружены");

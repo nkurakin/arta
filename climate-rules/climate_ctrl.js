@@ -11,8 +11,8 @@
 //        обратная связь термостата в UI:       wb/climate/fb/CompressorCommand
 //
 // Логика:
-//   1. Mode = OFF(0)            -> Command = 0 (компрессор обесточен).
-//   2. Mode = AUTO(1), Manual=ON(1) -> ручной режим: Command = 1 постоянно
+//   1. Mode = OFF(0)                 -> Command = 0 (компрессор обесточен).
+//   2. Mode = AUTO(1), Manual=ON(1)  -> ручной режим: Command = 1 постоянно
 //      (с учётом задержки минимального простоя при включении).
 //   3. Mode = AUTO(1), Manual=OFF(0) -> автоматический термостат:
 //      T = среднее(низ, верх); если оба недоступны — переносной датчик;
@@ -23,89 +23,93 @@
 //   5. Авария: если все внутренние датчики молчат более STALE_SEC секунд —
 //      Command = 0, логирование ошибки.
 //
-// Размещение: /etc/wb-rules/climate_ctrl.js (wb-rules перезагрузит сам).
+// Размещение: /etc/wb-rules/climate_ctrl.js (wb-rules перезагрузит файл сам).
 // Зависимостей от npm-пакетов нет — только API wb-rules.
+// Стиль: ES5 (движок wb-rules — Duktape), без trailing-запятых.
+// getEnvironment() в wb-rules отсутствует — настройки задаются константами ниже.
 // ============================================================================
 
-// ---- настройки (можно менять прямо здесь или через переменные окружения) ---
-var MIN_ON_SEC  = Number(getEnvironment("CLIMATE_MIN_ON_SEC")  || 180); // мин. время работы компрессора
-var MIN_OFF_SEC = Number(getEnvironment("CLIMATE_MIN_OFF_SEC") || 180); // мин. время простоя
-var STALE_SEC   = Number(getEnvironment("CLIMATE_STALE_SEC")   || 60);  // датчик считается потерянным
+"use strict";
+
+// ---- настройки (редактируются прямо здесь) ---------------------------------
+var MIN_ON_SEC  = 180; // минимальное время работы компрессора, сек
+var MIN_OFF_SEC = 180; // минимальное время простоя компрессора, сек
+var STALE_SEC   = 60;  // датчик считается потерянным после молчания, сек
 
 // ---- внутреннее состояние --------------------------------------------------
 var params = {
     Mode: 0,
     Manual: 0,
     TargetTemp: 5.0,
-    Hysteresis: 0.5,
+    Hysteresis: 0.5
 };
 
-var temps = {          // последние значения температур и время прихода (мс)
-    bottom:   { v: null, t: 0 },
-    top:      { v: null, t: 0 },
-    portable: { v: null, t: 0 },
+var temps = {
+    // последние значения температур и unix-время прихода, сек (null — не было)
+    bottom:   { v: null, t: null },
+    top:      { v: null, t: null },
+    portable: { v: null, t: null }
 };
 
-var command     = 0;   // текущая команда термостата (0/1)
-var lastSwitch  = 0;   // время последнего изменения команды, мс
-var errorState  = false;
+var command    = 0;  // текущая команда термостата (0/1)
+var lastSwitch = 0;  // unix-время последнего изменения команды, сек
+var errorState = false;
+
+function nowSec() {
+    return Math.floor(Date.now() / 1000);
+}
 
 // ---------------------------------------------------------------------------
-// Приём параметров от climate_ui.js (топики wb/climate/set/*, retained)
+// Приём параметров от climate_ui.js (топики wb/climate/set/<Param>, retained).
+// Топики содержат слэши — подписка через when(match) c обратным вызовом.
 // ---------------------------------------------------------------------------
-Object.keys(params).forEach(function (name) {
+["Mode", "Manual", "TargetTemp", "Hysteresis"].forEach(function (name) {
     defineRule("climate_ctrl_set_" + name, {
-        when: new RegExp("^wb/climate/set/" + name + "$"),
-        then: function (message) {
-            var v = parseFloat(message.message.toString());
+        when: function (match) {
+            return match("/wb/climate/set/" + name);
+        },
+        then: function (topic, message) {
+            var v = NaN;
+            try {
+                v = parseFloat(String(message));
+            } catch (e) {
+                return;
+            }
             if (isNaN(v)) return;
             var old = params[name];
             params[name] = v;
             log.info("climate_ctrl: параметр {} = {} (было {})", name, v, old);
             evaluate();
-        },
+        }
     });
 });
 
 // ---------------------------------------------------------------------------
-// Приём температур (wb-rules нотация device/channel)
+// Приём температур (wb-rules нотация device/channel, пробелы в именах каналов)
 // ---------------------------------------------------------------------------
-defineRule("climate_ctrl_temp_bottom", {
-    whenChanged: "wb-mai6_28/IN 1 N Temperature",
-    then: function (newValue) {
-        var v = Number(newValue);
-        if (newValue === null || isNaN(v)) return;
-        temps.bottom = { v: v, t: now() };
-        evaluate();
-    },
-});
-
-defineRule("climate_ctrl_temp_top", {
-    whenChanged: "wb-mai6_28/IN 2 P Temperature",
-    then: function (newValue) {
-        var v = Number(newValue);
-        if (newValue === null || isNaN(v)) return;
-        temps.top = { v: v, t: now() };
-        evaluate();
-    },
-});
-
-defineRule("climate_ctrl_temp_portable", {
-    whenChanged: "wb-mai6_28/IN 1 P Temperature",
-    then: function (newValue) {
-        var v = Number(newValue);
-        if (newValue === null || isNaN(v)) return;
-        temps.portable = { v: v, t: now() };
-        evaluate();
-    },
+[
+    ["bottom",   "wb-mai6_28/IN 1 N Temperature"],
+    ["top",      "wb-mai6_28/IN 2 P Temperature"],
+    ["portable", "wb-mai6_28/IN 1 P Temperature"]
+].forEach(function (pair) {
+    defineRule("climate_ctrl_temp_" + pair[0], {
+        whenChanged: pair[1],
+        then: function (newValue) {
+            var v = Number(newValue);
+            if (newValue === null || newValue === undefined || isNaN(v)) return;
+            temps[pair[0]] = { v: v, t: nowSec() };
+            evaluate();
+        }
+    });
 });
 
 // ---------------------------------------------------------------------------
-// Измерение текущей температуры камеры: среднее(низ, верх), резерв — портативный
-// Возвращает null, если данных нет / они устарели
+// Измерение текущей температуры камеры: среднее(низ, верх),
+// резерв — переносной датчик. Возвращает null, если данных нет/они устарели.
 // ---------------------------------------------------------------------------
 function fresh(entry) {
-    return entry.v !== null && (now() - entry.t) <= STALE_SEC * 1000;
+    return entry.v !== null && entry.t !== null &&
+           (nowSec() - entry.t) <= STALE_SEC;
 }
 
 function measureTemperature() {
@@ -123,32 +127,21 @@ function measureTemperature() {
 // ---------------------------------------------------------------------------
 function setCommand(newCmd) {
     if (newCmd === command) return;
-    var elapsed = (now() - lastSwitch) / 1000;
+    var elapsed = nowSec() - lastSwitch;
     if (command === 1 && elapsed < MIN_ON_SEC) {
         log.debug("climate_ctrl: переключение заблокировано (MIN_ON_SEC)");
-        scheduleRecheck(MIN_ON_SEC - elapsed + 1);
         return;
     }
     if (command === 0 && elapsed < MIN_OFF_SEC) {
         log.debug("climate_ctrl: переключение заблокировано (MIN_OFF_SEC)");
-        scheduleRecheck(MIN_OFF_SEC - elapsed + 1);
         return;
     }
     command = newCmd;
-    lastSwitch = now();
+    lastSwitch = nowSec();
     publish("wb-mrwm2_134/K1", String(command), { qos: 1, retain: true });
     publish("wb/climate/fb/CompressorCommand", String(command),
             { qos: 0, retain: true });
     log.info("climate_ctrl: команда компрессору = {}", command);
-}
-
-var recheckTimer = null;
-function scheduleRecheck(sec) {
-    if (recheckTimer) clearTimeout(recheckTimer);
-    recheckTimer = setTimeout(function () {
-        recheckTimer = null;
-        evaluate();
-    }, sec * 1000);
 }
 
 function evaluate() {
@@ -195,26 +188,31 @@ defineRule("climate_ctrl_loop", {
     cron: "* * * * * *", // каждую секунду
     then: function () {
         evaluate();
-    },
+    }
 });
 
 // ---------------------------------------------------------------------------
-// Безопасная позиция при старте правил: OFF, команда 0
+// Безопасная позиция при старте правил: команда 0.
+// then:false — правило НЕ выполняется автоматически при загрузке;
+// itIsTooComplexForNotifyChanges — разрешает dev/publish в then.
+// Реальный запуск — по timer() ниже, чтобы wb-mqtt-serial успел
+// восстановить состояние реле из retained-топиков.
 // ---------------------------------------------------------------------------
 defineRule("climate_ctrl_init", {
-    runAtStartup: {
-        time: "2s", // дать wb-mqtt-serial опросить модули
-        firstTimeOnly: false,
-    },
-    then: function () {
-        command = 0;
-        lastSwitch = now();
-        publish("wb-mrwm2_134/K1", "0", { qos: 1, retain: true });
-        publish("wb/climate/fb/CompressorCommand", "0", { qos: 0, retain: true });
-        log.info("climate_ctrl: инициализация, безопасная позиция OFF. " +
-                 "MIN_ON={}s MIN_OFF={}s STALE={}s", MIN_ON_SEC, MIN_OFF_SEC, STALE_SEC);
-        // evaluate подтянет retained-параметры из wb/climate/set/* автоматически
-    },
+    whenChanged: "climate_ui/Mode",
+    then: false,
+    itIsTooComplexForNotifyChanges: true
 });
+
+timer(function () {
+    command = 0;
+    lastSwitch = nowSec();
+    publish("wb-mrwm2_134/K1", "0", { qos: 1, retain: true });
+    publish("wb/climate/fb/CompressorCommand", "0", { qos: 0, retain: true });
+    log.info("climate_ctrl: инициализация, безопасная позиция. MIN_ON={}s MIN_OFF={}s STALE={}s",
+             MIN_ON_SEC, MIN_OFF_SEC, STALE_SEC);
+    // retained-параметры из wb/climate/set/* будут доставлены брокером
+    // автоматически; далее их подтянет evaluate() из цикла cron
+}, 5000);
 
 log.info("climate_ctrl: правила загружены");
