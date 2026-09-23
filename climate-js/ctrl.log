@@ -1,0 +1,15 @@
+nohup: ignoring input
+[climate_ctrl] термостат запущен
+[climate_ctrl] факт реле = 1
+[climate_ctrl] <- Mode = 1
+[climate_ctrl] <- Manual = 0
+[climate_ctrl] <- TargetTemp = 5
+[climate_ctrl] <- Hysteresis = 0.5
+[climate_ctrl] <- Mode = 1
+[climate_ctrl] <- Manual = 0
+[climate_ctrl] <- TargetTemp = 5
+[climate_ctrl] <- Hysteresis = 0.5
+[climate_ctrl] Command=1 (T=7.10 > 5.50)
+[climate_ctrl] факт реле = 1
+[climate_ctrl] Command=0 (OFF/авария)
+[climate_ctrl] факт реле = 0
