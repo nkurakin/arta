@@ -1,6 +1,2 @@
-# Python compiled files
 __pycache__/
 *.pyc
-
-# Node.js dependencies
-node_modules/
